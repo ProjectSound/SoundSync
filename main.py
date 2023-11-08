@@ -7,11 +7,11 @@ from pycaw.pycaw import AudioUtilities
 from datetime import datetime, timedelta
 
 class AudioController:
-    def __init__(self, process_name):
+    def __init__(self, process_name: str):
         self.process_name = process_name
         self.volume = self.process_volume()
 
-    def mute(self):
+    def mute(self) -> None:
         sessions = AudioUtilities.GetAllSessions()
         for session in sessions:
             interface = session.SimpleAudioVolume
@@ -19,7 +19,7 @@ class AudioController:
                 interface.SetMute(1, None)
                 print(self.process_name, "has been muted.")  # debug
 
-    def unmute(self):
+    def unmute(self) -> None:
         sessions = AudioUtilities.GetAllSessions()
         for session in sessions:
             interface = session.SimpleAudioVolume
@@ -27,7 +27,7 @@ class AudioController:
                 interface.SetMute(0, None)
                 print(self.process_name, "has been unmuted.")  # debug
 
-    def process_volume(self):
+    def process_volume(self) -> float:
         sessions = AudioUtilities.GetAllSessions()
         for session in sessions:
             interface = session.SimpleAudioVolume
@@ -35,7 +35,7 @@ class AudioController:
                 print("Volume:", interface.GetMasterVolume())  # debug
                 return interface.GetMasterVolume()
 
-    def set_volume(self, decibels):
+    def set_volume(self, decibels: float) -> None:
         sessions = AudioUtilities.GetAllSessions()
         for session in sessions:
             interface = session.SimpleAudioVolume
@@ -53,7 +53,7 @@ timeout_timestamp = None
 audio_controller = AudioController("chrome.exe")
 max_amplitude = 2**24 - 1  # Dla dźwięku o rozdzielczości 16 bitów
 
-def audio_callback(indata, frames, time, status):
+def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -> None:
     global max_rms
     global threshold
     global timeout_thread
@@ -96,7 +96,14 @@ def audio_callback(indata, frames, time, status):
     sd.sleep(1)
 
 
-def fade_audio(start, end, duration=2):
+def fade_audio(start: float, end: float, duration: int = 2) -> None:
+    """
+    Parameters:
+
+    start(float): The initial volume level.
+    end(float): The final volume level.
+    duration(int): The time over which to change the volume, in sec. Default - 2 sec
+    """    
     start_time = time.time()  # Zapisz czas rozpoczęcia pętli
 
     start = int(start * 100)
@@ -123,8 +130,8 @@ def fade_audio(start, end, duration=2):
             time.sleep(time_to_sleep)
 
 
-def timeout_handler():
-    time.sleep(5)  # Oczekuj 5 sekund
+def timeout_handler() -> None:
+    time.sleep(5)  # Oczekaj 5 sekund
 
 
 if __name__ == "__main__":
