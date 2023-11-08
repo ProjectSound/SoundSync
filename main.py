@@ -3,8 +3,10 @@ import time
 import sys
 import numpy as np
 import threading
+import collections
 from pycaw.pycaw import AudioUtilities
 from datetime import datetime, timedelta
+
 
 class AudioController:
     def __init__(self, process_name: str):
@@ -45,13 +47,29 @@ class AudioController:
                 interface.SetMasterVolume(self.volume, None)
                 print("Volume set to", self.volume)  # debug
 
+    def list_applications() -> list:
+        sessions = AudioUtilities.GetAllSessions()
+        apps = []
+        for index, session in enumerate(sessions):
+            if session.Process:
+                print(f"Index {index}: {session.Process.name()}")
+                apps.append(session.Process.name())
+        return apps        
+
+
+apps = AudioController.list_applications()
+print("Enter index of app")
+app_index = int(input())
 
 max_rms = 0.1
 threshold = 5
 timeout_thread = None
 timeout_timestamp = None
-audio_controller = AudioController("chrome.exe")
+#audio_controller = AudioController("opera.exe")
+audio_controller = AudioController(apps[app_index])
 max_amplitude = 2**24 - 1  # Dla dźwięku o rozdzielczości 16 bitów
+
+rms_values = collections.deque(maxlen=10)
 
 def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -> None:
     global max_rms
@@ -60,6 +78,23 @@ def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -
     global timeout_timestamp
 
     mapped_value = np.linalg.norm(indata)*10
+
+    rms = np.linalg.norm(indata)  # Calculate RMS value
+    rms_values.append(rms)  # Add RMS value to deque
+    avg_rms = sum(rms_values) / len(rms_values)  # Calculate moving average of RMS values
+
+    min_rms = 0.1  # Minimum RMS value to 0%
+    max_rms = max(max_rms, avg_rms)  # Update maximum RMS value
+
+    if (max_rms - min_rms) > 0:
+        mapped_value = (avg_rms - min_rms) / (max_rms - min_rms) * 100.0  # Scale value from 0% to 100%
+    else:
+        mapped_value = 0
+
+    compression_ratio = 2.0
+    threshold = 50.0
+    if mapped_value > threshold:
+        mapped_value = threshold + (mapped_value - threshold) / compression_ratio
 
     # rms = np.linalg.norm(indata)  # Oblicz wartość RMS sygnału
     # min_rms = 0.1  # Minimalna wartość RMS, która odpowiada 0%
@@ -71,7 +106,7 @@ def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -
 
     # print(rms)
 
-    # # print(f"Poziom głośności: {mapped_value:.2f}% (Maks RMS: {max_rms:.2f})")
+    #print(f"Poziom głośności: {mapped_value:.2f}% (Maks RMS: {max_rms:.2f})")
 
     if mapped_value >= threshold and timeout_thread is not None:
         timeout_timestamp = datetime.now()  # Zapisz czas przekroczenia progu
@@ -82,6 +117,7 @@ def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -
         # audio_controller.set_volume(0.05)
         timeout_thread = threading.Thread(target=timeout_handler)
         timeout_thread.start()
+
     elif mapped_value < threshold and timeout_thread is not None:
         if timeout_timestamp is not None:
             time_elapsed = datetime.now() - timeout_timestamp
@@ -131,8 +167,7 @@ def fade_audio(start: float, end: float, duration: int = 2) -> None:
 
 
 def timeout_handler() -> None:
-    time.sleep(5)  # Oczekaj 5 sekund
-
+    time.sleep(5)  # Oczekuj 5 sekund
 
 if __name__ == "__main__":
     with sd.InputStream(device="CABLE Output (VB-Audio Virtual Cable), Windows DirectSound",channels=2, callback=audio_callback):
