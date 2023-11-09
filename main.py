@@ -68,28 +68,43 @@ audio_controller = AudioController(apps[app_index])
 max_amplitude = 2**24 - 1  # Dla dźwięku o rozdzielczości 16 bitów
 
 rms_values = collections.deque(maxlen=10)
+max_rms_values = collections.deque(maxlen=1000)
 
 def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -> None:
     global max_rms
     global threshold
     global timeout_thread
     global timeout_timestamp
-    global streams
 
+    mapped_value = np.linalg.norm(indata)*10
 
-    rms = np.linalg.norm(indata)  # Oblicz wartość RMS sygnału
-    min_rms = 0.1  # Minimalna wartość RMS, która odpowiada 0%
-    max_rms = max(max_rms, rms)  # Zaktualizuj maksymalną wartość RMS
+    rms = np.linalg.norm(indata)  # Calculate RMS value
+    rms_values.append(rms)  # Add RMS value to deque
+    avg_rms = sum(rms_values) / len(rms_values)  # Calculate moving average of RMS values
+
+    min_rms = 0.1  # Minimum RMS value to 0%
+    max_rms = max(max_rms, avg_rms)  # Update maximum RMS value
+
     if (max_rms - min_rms) > 0:
-        mapped_value = (rms - min_rms) / (max_rms - min_rms) * 100.0  # Skaluj wartość od 0% do 100%
-        mapped_value = min(max(mapped_value,0), 100)  # Cap mapped_value beetwen 0-100
+        mapped_value = (avg_rms - min_rms) / (max_rms - min_rms) * 100.0  # Scale value from 0% to 100%
     else:
         mapped_value = 0
 
-    #print(rms)
-    lst = []
-    lst.append(mapped_value)
-    print(max(lst))
+    compression_ratio = 2.0
+    threshold = 50.0
+    if mapped_value > threshold:
+        mapped_value = threshold + (mapped_value - threshold) / compression_ratio
+
+    # rms = np.linalg.norm(indata)  # Oblicz wartość RMS sygnału
+    # min_rms = 0.1  # Minimalna wartość RMS, która odpowiada 0%
+    # max_rms = max(max_rms, rms)  # Zaktualizuj maksymalną wartość RMS
+    # if (max_rms - min_rms) > 0:
+    #     mapped_value = (rms - min_rms) / (max_rms - min_rms) * 100.0  # Skaluj wartość od 0% do 100%
+    # else:
+    #     mapped_value = 0
+
+    # print(rms)
+
     #print(f"Poziom głośności: {mapped_value:.2f}% (Maks RMS: {max_rms:.2f})")
 
     if mapped_value >= threshold and timeout_thread is not None:
@@ -112,7 +127,8 @@ def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -
                 fade_audio(0.05, 1.0, 1)
                 # audio_controller.set_volume(1.0)
                 timeout_thread = None
-
+    
+    #print(max(lisa))
     sd.sleep(1)
 
 
