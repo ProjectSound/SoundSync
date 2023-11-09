@@ -56,7 +56,6 @@ class AudioController:
                 apps.append(session.Process.name())
         return apps        
 
-
 apps = AudioController.list_applications()
 print("Enter index of app")
 app_index = int(input())
@@ -65,7 +64,6 @@ max_rms = 0.1
 threshold = 5
 timeout_thread = None
 timeout_timestamp = None
-#audio_controller = AudioController("opera.exe")
 audio_controller = AudioController(apps[app_index])
 max_amplitude = 2**24 - 1  # Dla dźwięku o rozdzielczości 16 bitów
 
@@ -76,36 +74,22 @@ def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -
     global threshold
     global timeout_thread
     global timeout_timestamp
+    global streams
 
-    mapped_value = np.linalg.norm(indata)*10
 
-    rms = np.linalg.norm(indata)  # Calculate RMS value
-    rms_values.append(rms)  # Add RMS value to deque
-    avg_rms = sum(rms_values) / len(rms_values)  # Calculate moving average of RMS values
-
-    min_rms = 0.1  # Minimum RMS value to 0%
-    max_rms = max(max_rms, avg_rms)  # Update maximum RMS value
-
+    rms = np.linalg.norm(indata)  # Oblicz wartość RMS sygnału
+    min_rms = 0.1  # Minimalna wartość RMS, która odpowiada 0%
+    max_rms = max(max_rms, rms)  # Zaktualizuj maksymalną wartość RMS
     if (max_rms - min_rms) > 0:
-        mapped_value = (avg_rms - min_rms) / (max_rms - min_rms) * 100.0  # Scale value from 0% to 100%
+        mapped_value = (rms - min_rms) / (max_rms - min_rms) * 100.0  # Skaluj wartość od 0% do 100%
+        mapped_value = min(max(mapped_value,0), 100)  # Cap mapped_value beetwen 0-100
     else:
         mapped_value = 0
 
-    compression_ratio = 2.0
-    threshold = 50.0
-    if mapped_value > threshold:
-        mapped_value = threshold + (mapped_value - threshold) / compression_ratio
-
-    # rms = np.linalg.norm(indata)  # Oblicz wartość RMS sygnału
-    # min_rms = 0.1  # Minimalna wartość RMS, która odpowiada 0%
-    # max_rms = max(max_rms, rms)  # Zaktualizuj maksymalną wartość RMS
-    # if (max_rms - min_rms) > 0:
-    #     mapped_value = (rms - min_rms) / (max_rms - min_rms) * 100.0  # Skaluj wartość od 0% do 100%
-    # else:
-    #     mapped_value = 0
-
-    # print(rms)
-
+    #print(rms)
+    lst = []
+    lst.append(mapped_value)
+    print(max(lst))
     #print(f"Poziom głośności: {mapped_value:.2f}% (Maks RMS: {max_rms:.2f})")
 
     if mapped_value >= threshold and timeout_thread is not None:
@@ -130,6 +114,49 @@ def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -
                 timeout_thread = None
 
     sd.sleep(1)
+
+
+devices = sd.query_devices()
+input_devices = [device for device in devices if device['max_input_channels'] > 0 and not device['name'].startswith('Loopback')]
+device_names = set()
+
+#show all with channels
+# for device in devices:
+#     if device['max_input_channels'] > 0 and not device['name'].startswith('Loopback'):
+#         device_name = device['name']
+#         if device_name not in device_names:
+#             input_devices.append(device)
+#             device_names.add(device_name)
+
+# print("Available input devices:")
+# for i, device in enumerate(input_devices):
+#     print(f"Device {i}: {device['name']} - {device['hostapi']} - {device['max_input_channels']} channels")
+#show all without channels
+
+devices = sd.query_devices()
+for i, device in enumerate(devices):
+    if device['hostapi'] == 0 and device['max_input_channels'] > 0:
+        print(f"Device {i}: {device['name']}")
+
+device_indices = []
+for i in range(2):
+    device_index = int(input(f"Enter the index of input device {i+1}: "))
+    device_indices.append(device_index)
+
+    # Create input streams for the chosen devices
+streams = []
+for i in range(2):
+    device_name = input_devices[device_indices[i]]['name']
+    stream = sd.InputStream(device=device_name, channels=2, callback=audio_callback)
+    streams.append(stream)
+
+    # Start the input streams in separate threads
+threads = []
+for i in range(2):
+    thread = threading.Thread(target=streams[i].start)
+    threads.append(thread)
+    threads[i].start()
+
 
 
 def fade_audio(start: float, end: float, duration: int = 2) -> None:
@@ -170,9 +197,12 @@ def timeout_handler() -> None:
     time.sleep(5)  # Oczekuj 5 sekund
 
 if __name__ == "__main__":
-    with sd.InputStream(device="CABLE Output (VB-Audio Virtual Cable), Windows DirectSound",channels=2, callback=audio_callback):
-        try:
-            while True:
-                time.sleep(10000)
-        except KeyboardInterrupt:
-            pass
+    try:
+        while True:
+            time.sleep(10000)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # Stop both streams when the program ends
+        for stream in streams:
+            stream.stop()
