@@ -57,23 +57,34 @@ class AudioController:
                 apps.append(session.Process.name())
         return apps
     
-apps = AudioController.list_applications()
-print("Enter index of app")
-app_index = int(input())
-if app_index >= len(apps):
-    print("Invalid index. Please enter a number between 0 and", len(apps)-1)
-else:
-    audio_controller = AudioController(apps[app_index])
-
 threshold = []
 threshold_not_reached = []
 
-for i in range(2):
-    print(f"Enter the threshold value for input {i+1}:")
-    threshold.append(float(input()))
+apps = AudioController.list_applications()
+# print("Enter index of app")
+# app_index = int(input())
+# if app_index >= len(apps):
+#     print("Invalid index. Please enter a number between 0 and", len(apps)-1)
+# else:
+#     audio_controller = AudioController(apps[app_index])
+app_index = 1
 
-    print(f"Enter the threshold not reached duration (in seconds) for input {i+1}:")
-    threshold_not_reached.append(int(input()))
+threshold.append(float(10))
+threshold.append(float(20))
+threshold_not_reached.append(5)
+threshold_not_reached.append(10)
+
+
+normal_sound_level = float(input("Normal sound level: "))
+detected_sound_level = float(input("Turned down to level: "))
+
+
+# for i in range(2):
+#     print(f"Enter the threshold value for input {i+1}:")
+#     threshold.append(float(input()))
+
+#     print(f"Enter the threshold not reached duration (in seconds) for input {i+1}:")
+#     threshold_not_reached.append(int(input()))
 
 max_rms = 0.1
 timeout_threads = [None] * len(threshold)
@@ -93,9 +104,6 @@ def create_audio_callback(threshold, threshold_not_reached):
         nonlocal timeout_threads
         nonlocal timeout_timestamps
         nonlocal max_rms
-            # global threshold
-            # global timeout_thread
-            # global timeout_timestamp
 
         rms = np.linalg.norm(indata)
         min_rms = 0.1
@@ -112,7 +120,7 @@ def create_audio_callback(threshold, threshold_not_reached):
 
             if mapped_value >= threshold[i] and timeout_threads[i] is None:
                 print(f"Próg głośności dla input {i+1} osiągnięty, rozpoczynam wątek timeouta")
-                fade_audio(1.0, 0.05, 1)
+                fade_audio(normal_sound_level, detected_sound_level, 1)
                 timeout_threads[i] = threading.Thread(target=timeout_handler, args=(i,))
                 timeout_threads[i].start()
 
@@ -123,7 +131,7 @@ def create_audio_callback(threshold, threshold_not_reached):
                         print(f"Poziom głośności dla input {i+1} poniżej progu przez {threshold_not_reached[i]} sekund, kończę wątek timeouta")
                         timeout_threads[i].join()
                         print("Zwiększam poziom")
-                        fade_audio(0.05, 1.0, 1)
+                        fade_audio(detected_sound_level, normal_sound_level, 1)
                         timeout_threads[i] = None
         sd.sleep(1)
 
