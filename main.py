@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import threading
 import collections
+import keyboard
 from time import sleep
 from threading import Lock
 from pycaw.pycaw import AudioUtilities
@@ -57,7 +58,7 @@ class AudioController:
                 print(f"Index {index}: {session.Process.name()}")
                 apps.append(session.Process.name())
         return apps
-
+    
 class InputState:
     def __init__(self, threshold, threshold_not_reached, normal_level, detected_level):
         self.threshold = threshold
@@ -73,17 +74,35 @@ class SharedState:
         self.active_input = None
         self.lock = Lock()
 
-# print("Enter index of app")
-# app_index = int(input())
-# if app_index >= len(apps):
-#     print("Invalid index. Please enter a number between 0 and", len(apps)-1)
-# else:
-#     audio_controller = AudioController(apps[app_index])
+class Bind:
+    def __init__(self, audio_controller):
+        self.audio_controller = audio_controller
+        self.is_manually_muted = False
 
+    def toggle_mute(self):
+        if self.is_manually_muted:
+            self.audio_controller.set_volume(self.audio_controller.previous_volume)
+            self.is_manually_muted = False
+        else:
+            self.audio_controller.previous_volume = self.audio_controller.process_volume()
+            self.audio_controller.set_volume(0)
+            self.is_manually_muted = True
+        print(f"{self.audio_controller.process_name} mute toggled.")
 
+    def is_muted(self):
+        return self.is_manually_muted
+    
 apps = AudioController.list_applications()
 app_index = 3
 audio_controller = AudioController(apps[app_index])
+
+bind = Bind(audio_controller)
+
+def handle_1_key():
+    bind.toggle_mute()
+
+keyboard.add_hotkey('f1', handle_1_key)
+
 threshold1 = 30
 threshold_not_reached1 = 5
 threshold2 = 30
@@ -91,22 +110,15 @@ threshold_not_reached2 = 2
 normal_sound_level = 1
 detected_sound_level = 0.3
 
-#normal_sound_level = float(input("Normal sound level: "))
-#detected_sound_level = float(input("Turned down to level: "))
-# for i in range(2):
-#     print(f"Enter the threshold value for input {i+1}:")
-#     threshold.append(float(input()))
-
-#     print(f"Enter the threshold not reached duration (in seconds) for input {i+1}:")
-#     threshold_not_reached.append(int(input()))
-
-audio_controller = AudioController(apps[app_index])
 rms_values = collections.deque(maxlen=10)
 max_rms_values = collections.deque(maxlen=1000)
 
 state_lock = Lock()
 shared_state = SharedState()
 def audio_callback(indata, frames, time_info, status, input_state, other_state, audio_controller):
+    if bind.is_muted():
+        return
+    
     rms = np.linalg.norm(indata)
     min_rms = 0.1
 
@@ -114,11 +126,11 @@ def audio_callback(indata, frames, time_info, status, input_state, other_state, 
         input_state.max_rms = max(input_state.max_rms, rms)
         mapped_value = (rms - min_rms) / (input_state.max_rms - min_rms) * 100.0 if (input_state.max_rms - min_rms) > 0 else 0
 
-        print(f"Input RMS: {rms}, Mapped Value: {mapped_value}, Threshold: {input_state.threshold}")  # Dodane logowanie
+        # print(f"Input RMS: {rms}, Mapped Value: {mapped_value}, Threshold: {input_state.threshold}")  # Dodane logowanie
 
         if mapped_value >= input_state.threshold:
             if not input_state.is_faded:
-                print(f"Fading audio down for input state with threshold {input_state.threshold}")  # Dodane logowanie
+                # print(f"Fading audio down for input state with threshold {input_state.threshold}")  # Dodane logowanie
                 fade_audio(audio_controller, input_state.detected_level, duration=1)
                 input_state.is_faded = True
             input_state.timeout_timestamp = datetime.now()
@@ -128,13 +140,13 @@ def audio_callback(indata, frames, time_info, status, input_state, other_state, 
                 if datetime.now() - input_state.timeout_timestamp >= timedelta(seconds=input_state.threshold_not_reached):
                     if other_state.is_faded:
                         if datetime.now() - other_state.timeout_timestamp >= timedelta(seconds=other_state.threshold_not_reached):
-                            print(f"Fading audio up for input state with threshold {input_state.threshold}")  # Dodane logowanie
+                            # print(f"Fading audio up for input state with threshold {input_state.threshold}")  # Dodane logowanie
                             fade_audio(audio_controller, input_state.normal_level, duration=1)
                             input_state.is_faded = False
                             other_state.is_faded = False
                             shared_state.active_input = None
                     else:
-                        print(f"Fading audio up for input state with threshold {input_state.threshold}")  # Dodane logowanie
+                        # print(f"Fading audio up for input state with threshold {input_state.threshold}")  # Dodane logowanie
                         fade_audio(audio_controller, input_state.normal_level, duration=1)
                         input_state.is_faded = False
                         shared_state.active_input = None
@@ -200,6 +212,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
     finally:
-        # Stop both streams when the program ends
+        keyboard.unhook_all()
         for stream in streams:
             stream.stop()
+
