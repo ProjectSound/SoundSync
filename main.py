@@ -4,9 +4,10 @@ import sys
 import numpy as np
 import threading
 import collections
+from time import sleep
+from threading import Lock
 from pycaw.pycaw import AudioUtilities
 from datetime import datetime, timedelta
-
 
 class AudioController:
     def __init__(self, process_name: str):
@@ -56,29 +57,42 @@ class AudioController:
                 print(f"Index {index}: {session.Process.name()}")
                 apps.append(session.Process.name())
         return apps
-    
-threshold = []
-threshold_not_reached = []
 
-apps = AudioController.list_applications()
+class InputState:
+    def __init__(self, threshold, threshold_not_reached, normal_level, detected_level):
+        self.threshold = threshold
+        self.threshold_not_reached = threshold_not_reached
+        self.normal_level = normal_level
+        self.detected_level = detected_level
+        self.is_faded = False
+        self.timeout_timestamp = None
+        self.max_rms = 0.1 
+
+class SharedState:
+    def __init__(self):
+        self.active_input = None
+        self.lock = Lock()
+
 # print("Enter index of app")
 # app_index = int(input())
 # if app_index >= len(apps):
 #     print("Invalid index. Please enter a number between 0 and", len(apps)-1)
 # else:
 #     audio_controller = AudioController(apps[app_index])
-app_index = 1
-
-threshold.append(float(10))
-threshold.append(float(20))
-threshold_not_reached.append(5)
-threshold_not_reached.append(10)
 
 
-normal_sound_level = float(input("Normal sound level: "))
-detected_sound_level = float(input("Turned down to level: "))
+apps = AudioController.list_applications()
+app_index = 3
+audio_controller = AudioController(apps[app_index])
+threshold1 = 30
+threshold_not_reached1 = 5
+threshold2 = 30
+threshold_not_reached2 = 2
+normal_sound_level = 1
+detected_sound_level = 0.3
 
-
+#normal_sound_level = float(input("Normal sound level: "))
+#detected_sound_level = float(input("Turned down to level: "))
 # for i in range(2):
 #     print(f"Enter the threshold value for input {i+1}:")
 #     threshold.append(float(input()))
@@ -86,56 +100,53 @@ detected_sound_level = float(input("Turned down to level: "))
 #     print(f"Enter the threshold not reached duration (in seconds) for input {i+1}:")
 #     threshold_not_reached.append(int(input()))
 
-max_rms = 0.1
-timeout_threads = [None] * len(threshold)
 audio_controller = AudioController(apps[app_index])
-max_amplitude = 2**24 - 1  # Dla dźwięku o rozdzielczości 16 bitów
-
 rms_values = collections.deque(maxlen=10)
 max_rms_values = collections.deque(maxlen=1000)
 
-#create_audio_callback
-def create_audio_callback(threshold, threshold_not_reached):
-    timeout_threads = [None] * len(threshold)
-    timeout_timestamps = [None] * len(threshold)
-    max_rms = 0.1
+state_lock = Lock()
+shared_state = SharedState()
+def audio_callback(indata, frames, time_info, status, input_state, other_state, audio_controller):
+    rms = np.linalg.norm(indata)
+    min_rms = 0.1
 
-    def audio_callback(indata, frames: int, time: float, status: sd.CallbackFlags) -> None:
-        nonlocal timeout_threads
-        nonlocal timeout_timestamps
-        nonlocal max_rms
+    with shared_state.lock:
+        input_state.max_rms = max(input_state.max_rms, rms)
+        mapped_value = (rms - min_rms) / (input_state.max_rms - min_rms) * 100.0 if (input_state.max_rms - min_rms) > 0 else 0
 
-        rms = np.linalg.norm(indata)
-        min_rms = 0.1
-        max_rms = max(max_rms, rms)
-        if (max_rms - min_rms) > 0:
-            mapped_value = (rms - min_rms) / (max_rms - min_rms) * 100.0
-            mapped_value = min(max(mapped_value, 0), 100)
+        print(f"Input RMS: {rms}, Mapped Value: {mapped_value}, Threshold: {input_state.threshold}")  # Dodane logowanie
+
+        if mapped_value >= input_state.threshold:
+            if not input_state.is_faded:
+                print(f"Fading audio down for input state with threshold {input_state.threshold}")  # Dodane logowanie
+                fade_audio(audio_controller, input_state.detected_level, duration=1)
+                input_state.is_faded = True
+            input_state.timeout_timestamp = datetime.now()
+            shared_state.active_input = input_state
         else:
-            mapped_value = 0
+            if shared_state.active_input == input_state:
+                if datetime.now() - input_state.timeout_timestamp >= timedelta(seconds=input_state.threshold_not_reached):
+                    if other_state.is_faded:
+                        if datetime.now() - other_state.timeout_timestamp >= timedelta(seconds=other_state.threshold_not_reached):
+                            print(f"Fading audio up for input state with threshold {input_state.threshold}")  # Dodane logowanie
+                            fade_audio(audio_controller, input_state.normal_level, duration=1)
+                            input_state.is_faded = False
+                            other_state.is_faded = False
+                            shared_state.active_input = None
+                    else:
+                        print(f"Fading audio up for input state with threshold {input_state.threshold}")  # Dodane logowanie
+                        fade_audio(audio_controller, input_state.normal_level, duration=1)
+                        input_state.is_faded = False
+                        shared_state.active_input = None
 
-        for i in range(len(threshold)):
-            if mapped_value >= threshold[i] and timeout_threads[i] is not None:
-                timeout_timestamps[i] = datetime.now()
+    sd.sleep(1)
 
-            if mapped_value >= threshold[i] and timeout_threads[i] is None:
-                print(f"Próg głośności dla input {i+1} osiągnięty, rozpoczynam wątek timeouta")
-                fade_audio(normal_sound_level, detected_sound_level, 1)
-                timeout_threads[i] = threading.Thread(target=timeout_handler, args=(i,))
-                timeout_threads[i].start()
+state_input1 = InputState(threshold1, threshold_not_reached1, normal_sound_level, detected_sound_level)
+state_input2 = InputState(threshold2, threshold_not_reached2, normal_sound_level, detected_sound_level)
 
-            elif mapped_value < threshold[i] and timeout_threads[i] is not None:
-                if timeout_timestamps[i] is not None:
-                    time_elapsed = datetime.now() - timeout_timestamps[i]
-                    if time_elapsed >= timedelta(seconds=threshold_not_reached[i]):
-                        print(f"Poziom głośności dla input {i+1} poniżej progu przez {threshold_not_reached[i]} sekund, kończę wątek timeouta")
-                        timeout_threads[i].join()
-                        print("Zwiększam poziom")
-                        fade_audio(detected_sound_level, normal_sound_level, 1)
-                        timeout_threads[i] = None
-        sd.sleep(1)
-
-    return audio_callback        
+# Przypisanie funkcji callback do każdego inputu
+callback_function1 = lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, state_input1, state_input2, audio_controller)
+callback_function2 = lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, state_input2, state_input1, audio_controller)
 
 devices = sd.query_devices()
 input_devices = [device for device in devices if device['max_input_channels'] > 0 and not device['name'].startswith('Loopback')]
@@ -157,48 +168,30 @@ threads = []
 
 for i in range(2):
     device_name = input_devices[device_indices[i]]['name']
-    stream = sd.InputStream(device=device_name, channels=2, callback=create_audio_callback(threshold=[threshold[i]], threshold_not_reached=[threshold_not_reached[i]]))
+    callback_function = callback_function1 if i == 0 else callback_function2
+    stream = sd.InputStream(device=device_name, channels=2, callback=callback_function)
     streams.append(stream)
-
-    # Start the input streams in separate threads
     thread = threading.Thread(target=stream.start)
     threads.append(thread)
     thread.start()
 
-def fade_audio(start: float, end: float, duration: int = 2) -> None:
-    """
-    Parameters:
+volume_lock = Lock()
+def fade_audio(audio_controller, target_level, duration=1):
+    with volume_lock:
+        current_level = audio_controller.process_volume()
+        if current_level != target_level:
+            start_time = time.time()
+            while True:
+                elapsed = time.time() - start_time
+                if elapsed > duration:
+                    break
+                new_level = current_level + (target_level - current_level) * (elapsed / duration)
+                audio_controller.set_volume(new_level)
+                time.sleep(0.01)  # Krótkie opóźnienie dla płynnego przejścia
+            audio_controller.set_volume(target_level)
 
-    start(float): The initial volume level.
-    end(float): The final volume level.
-    duration(int): The time over which to change the volume, in sec. Default - 2 sec
-    """    
-    start_time = time.time()  # Zapisz czas rozpoczęcia pętli
-
-    start = int(start * 100)
-    end = int(end * 100)
-
-    if start < end:
-        step = 5
-    elif start > end:
-        step = -5
-    else:
-        return
-
-    for value in range(start, end + step, step):
-        audio_controller.set_volume(float(value / 100))
-
-        elapsed_time = time.time() - start_time  # Oblicz czas, który minął od rozpoczęcia pętli
-
-        if end == value:
-            time_to_sleep = 0
-        else:
-            time_to_sleep = (duration - elapsed_time) / (abs(end - value))  # Oblicz czas oczekiwania na kolejną iterację
-        if time_to_sleep > 0:
-            time.sleep(time_to_sleep)
-
-def timeout_handler(i) -> None:
-    time.sleep(threshold_not_reached[i])  # Oczekuj threshold dla input1 oraz input2 sekund
+def timeout_handler(threshold_not_reached, audio_controller):
+    time.sleep(threshold_not_reached)
 
 if __name__ == "__main__":
     try:
