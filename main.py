@@ -115,37 +115,82 @@ class Bind:
     def disable_input2(self):
         self.is_input2_disabled = not self.is_input2_disabled
 
-    #CHANGE TO HARD
-    def hard(self):
-        CutOff.hard(detected_sound_level)
+    #HARD
+    def set_hard_mode():
+        cut_off.set_mode("Hard")
+    #FADE
+    def set_fade_mode():
+        cut_off.set_mode("Fade")
+    #HARD FADE
+    def set_hard_fade_mode():
+        cut_off.set_mode("Hard cut + fade up")
+    #FADE HARD
+    def set_fade_hard_mode():
+        cut_off.set_mode("Fade down + hard up")
 
 class CutOff:
-    def __init__ (self, audio_controller, normal_sound_level, detected_sound_level):
+    def __init__(self, audio_controller, normal_level, detected_level):
         self.audio_controller = audio_controller
-        self.normal_level = normal_sound_level
-        self.detected_level = detected_sound_level
-        self.is_hard_mode = False
+        self.normal_level = normal_level
+        self.detected_level = detected_level
+        self.mode = "fade"  # Domyślny tryb
 
-    #CHANGE TO HARD
-    def toggle_hard(self):
-        self.is_hard_mode = not self.is_hard_mode
+    def set_mode(self, mode):
+        self.mode = mode
+        print(f"CutOff mode set to {mode}")
 
     def apply_volume(self, input_state):
-        new_level = self.normal_level if input_state.is_faded else self.detected_level
-        if self.is_hard_mode:
-            self.audio_controller.set_volume(new_level)
-            input_state.is_faded = not input_state.is_faded
-        else:
-            fade_audio(self.audio_controller, new_level, duration=1)
+        new_level = self.detected_level if input_state.is_faded else self.normal_level
 
+        if self.mode == "Fade":
+            CutOff.fade_audio(self.audio_controller, new_level, duration=1)
+        elif self.mode == "Hard":
+            self.audio_controller.set_volume(new_level)
+        elif self.mode == "Fade down + hard up":
+            if input_state.is_faded:
+                self.audio_controller.set_volume(new_level)  # Hard
+            else:
+                CutOff.fade_audio(self.audio_controller, new_level, duration=1)  # Fade
+        elif self.mode == "Hard cut + fade up":
+            if input_state.is_faded:
+                CutOff.fade_audio(self.audio_controller, new_level, duration=1)  # Fade
+            else:
+                self.audio_controller.set_volume(new_level)  # Hard
+
+        input_state.is_faded = not input_state.is_faded
+
+    @staticmethod
+    def fade_audio(audio_controller, target_level, duration=1):
+        with volume_lock:
+            current_level = audio_controller.process_volume()
+            if current_level != target_level:
+                start_time = time.time()
+                while True:
+                    elapsed = time.time() - start_time
+                    if elapsed > duration:
+                        break
+                    new_level = current_level + (target_level - current_level) * (elapsed / duration)
+                    audio_controller.set_volume(new_level)
+                    time.sleep(0.01)
+                audio_controller.set_volume(target_level)
+        
+
+cutoffModes = [
+    "Hard",
+    "Fade",
+    "Hard cut + fade up",
+    "Fade down + hard up"
+#    ,"Mute + fade up"
+#    ,"Mute + hard up"
+]
 
 device_indices = []
-for i in range(2):
-    device_index = int(input(f"Enter the index of input device {i+1}: "))
-    device_indices.append(device_index)
+# for i in range(2):
+#     device_index = int(input(f"Enter the index of input device {i+1}: "))
+#     device_indices.append(device_index)
 
-# device_index = int(input(f"Enter the index of input device: "))
-# device_indices.append(device_index)
+device_index = int(input(f"Enter the index of input device: "))
+device_indices.append(device_index)
 
 threshold1 = 30
 threshold_not_reached1 = 5
@@ -154,8 +199,10 @@ threshold_not_reached2 = 2
 normal_sound_level = 1
 detected_sound_level = 0.3
 
+volume_lock = Lock()
+
 apps = AudioController.list_applications()
-app_index = 3
+app_index = 0
 audio_controller = AudioController(apps[app_index])
 bind = Bind(audio_controller)
 cut_off = CutOff(audio_controller, normal_sound_level, detected_sound_level)
@@ -164,7 +211,11 @@ keyboard.add_hotkey('f1', bind.toggle_mute)
 keyboard.add_hotkey('f2', bind.toggle_app_running)
 keyboard.add_hotkey('f3', bind.disable_input1)
 keyboard.add_hotkey('f4', bind.disable_input2)
-keyboard.add_hotkey('f5', cut_off.toggle_hard)
+
+keyboard.add_hotkey('1', Bind.set_hard_mode)
+keyboard.add_hotkey('2', Bind.set_fade_mode)
+keyboard.add_hotkey('3', Bind.set_hard_fade_mode)
+keyboard.add_hotkey('4', Bind.set_fade_hard_mode)
 
 use_input2 = len(device_indices) > 1 #Optional input
 
@@ -252,20 +303,6 @@ for i in range(2 if use_input2 else 1):
     threads.append(thread)
     thread.start()
 
-volume_lock = Lock()
-def fade_audio(audio_controller, target_level, duration=1):
-    with volume_lock:
-        current_level = audio_controller.process_volume()
-        if current_level != target_level:
-            start_time = time.time()
-            while True:
-                elapsed = time.time() - start_time
-                if elapsed > duration:
-                    break
-                new_level = current_level + (target_level - current_level) * (elapsed / duration)
-                audio_controller.set_volume(new_level)
-                time.sleep(0.01)  # Krótkie opóźnienie dla płynnego przejścia
-            audio_controller.set_volume(target_level)
 
 def timeout_handler(threshold_not_reached, audio_controller):
     time.sleep(threshold_not_reached)
