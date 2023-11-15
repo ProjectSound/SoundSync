@@ -1,3 +1,4 @@
+
 import sounddevice as sd
 import time
 import sys
@@ -118,6 +119,37 @@ class Bind:
     def set_mute_fade_mode():
         cut_off.set_mode("Mute + hard up")
 
+    #ADD BIND
+    def add_bind():
+        print("Dostępne funkcje do zbindowania:")
+        for key, value in current_binds.items():
+            if value == '':
+                print(f"Kombinacja: {key}")
+
+        key_combination = input("Podaj kombinację klawiszy dla nowego bindu (np. 'ctrl+alt+t'): ")
+        if key_combination in current_binds and current_binds[key_combination] == '':
+            function_name = input("Podaj nazwę funkcji do zbindowania (np. 'toggle_mute'): ")
+            # Sprawdź, czy funkcja istnieje
+            if hasattr(bind, function_name):
+                hook = keyboard.add_hotkey(key_combination, lambda: getattr(bind, function_name)())
+                current_binds[key_combination] = hook
+                print(f"Bind '{function_name}' dodany do '{key_combination}'")
+            else:
+                print("Funkcja nie istnieje.")
+        else:
+            print("Niepoprawna kombinacja klawiszy lub już jest używana.")
+
+    #REMOVE BIND
+    def remove_bind():
+        key_combination = input("Podaj kombinację klawiszy bindu do usunięcia: ")
+        if key_combination in current_binds and current_binds[key_combination] != '':
+            keyboard.unhook(current_binds[key_combination])
+            current_binds[key_combination] = ''
+            print(f"Bind '{key_combination}' usunięty.")
+        else:
+            print("Bind nie istnieje lub jest już nieaktywny.")
+ 
+
 class CutOff:
     def __init__(self, audio_controller, normal_level, detected_level):
         self.audio_controller = audio_controller
@@ -177,14 +209,14 @@ class CutOff:
                     time.sleep(0.01)
                 audio_controller.set_volume(target_level)
   
-cutoffModes = [
-    "Hard",
-    "Fade",
-    "Hard cut + fade up",
-    "Fade down + hard up",
-    "Mute + fade up",
-    "Mute + hard up"
-]
+# cutoffModes = [
+#     "Hard",
+#     "Fade",
+#     "Hard cut + fade up",
+#     "Fade down + hard up",
+#     "Mute + fade up",
+#     "Mute + hard up"
+# ]
 
 device_indices = []
 for i in range(2):
@@ -208,17 +240,58 @@ audio_controller = AudioController(apps[app_index])
 bind = Bind(audio_controller)
 cut_off = CutOff(audio_controller, normal_sound_level, detected_sound_level)
 
-keyboard.add_hotkey('f1', bind.toggle_mute)
-keyboard.add_hotkey('f2', bind.toggle_app_running)
-keyboard.add_hotkey('f3', bind.disable_input1)
-keyboard.add_hotkey('f4', bind.disable_input2)
+current_binds = {'f1': bind.toggle_mute, 
+                 'f2': bind.toggle_app_running, 
+                 'f3': bind.disable_input1, 
+                 'f4': bind.disable_input2, 
+                 '5': bind.set_hard_mode, 
+                 '6': bind.set_fade_mode, 
+                 '7': bind.set_fade_hard_mode, 
+                 '8': bind.set_mute_fade_mode,
+                 '9': bind.set_mute_hard_mode 
+                 }
 
-keyboard.add_hotkey('1', Bind.set_hard_mode)
-keyboard.add_hotkey('2', Bind.set_fade_mode)
-keyboard.add_hotkey('3', Bind.set_hard_fade_mode)
-keyboard.add_hotkey('4', Bind.set_fade_hard_mode)
-keyboard.add_hotkey('5', Bind.set_mute_fade_mode)
-keyboard.add_hotkey('6', Bind.set_mute_hard_mode)
+bind = Bind(audio_controller)
+
+
+
+while True:
+    choice = input("Wybierz opcję: [1] Dodaj bind, [2] Usuń bind, [3] Wyjście: ")
+    if choice == '1':
+        bind.add_bind()
+    elif choice == '2':
+        bind.remove_bind()
+    elif choice == '3':
+        break
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# keyboard.add_hotkey('f1', bind.toggle_mute)
+# keyboard.add_hotkey('f2', bind.toggle_app_running)
+# keyboard.add_hotkey('f3', bind.disable_input1)
+# keyboard.add_hotkey('f4', bind.disable_input2)
+
+# keyboard.add_hotkey('1', Bind.set_hard_mode)
+# keyboard.add_hotkey('2', Bind.set_fade_mode)
+# keyboard.add_hotkey('3', Bind.set_hard_fade_mode)
+# keyboard.add_hotkey('4', Bind.set_fade_hard_mode)
+# keyboard.add_hotkey('5', Bind.set_mute_fade_mode)
+# keyboard.add_hotkey('6', Bind.set_mute_hard_mode)
 
 use_input2 = len(device_indices) > 1 #Optional input
 
