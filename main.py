@@ -83,6 +83,7 @@ class Bind:
     
     # START / STOP APP
     def toggle_app_running(self):
+        global streams
         if self.is_app_running:
             for stream in streams:
                 stream.stop()
@@ -94,62 +95,82 @@ class Bind:
             self.is_app_running = True
 
     # DISABLE INPUT 1
+    @staticmethod
     def disable_input1(self):
         self.is_input1_disabled = not self.is_input1_disabled
     # DISABLE INPUT 2
+    @staticmethod
     def disable_input2(self):
         self.is_input2_disabled = not self.is_input2_disabled
 
     #HARD
+    @staticmethod
     def set_hard_mode():
         cut_off.set_mode("Hard")
     #FADE
+    @staticmethod
     def set_fade_mode():
         cut_off.set_mode("Fade")
     #HARD FADE
+    @staticmethod
     def set_hard_fade_mode():
         cut_off.set_mode("Hard cut + fade up")
     #FADE HARD
+    @staticmethod
     def set_fade_hard_mode():
         cut_off.set_mode("Fade down + hard up")
     #Mute FADE
+    @staticmethod
     def set_mute_hard_mode():
         cut_off.set_mode("Mute + fade up")
     #MUTE HARD
+    @staticmethod
     def set_mute_fade_mode():
         cut_off.set_mode("Mute + hard up")
 
-    #ADD BIND
-    def add_bind():
-        print("Dostępne funkcje do zbindowania:")
-        for key, value in current_binds.items():
-            if value == '':
-                print(f"Kombinacja: {key}")
+    #LIST BINDS
+    @staticmethod
+    def list_active_binds():
+        print("Active binds:")
+        for key, function in current_binds.items():
+            print(f"{key}: {function.__name__}")
 
-        key_combination = input("Podaj kombinację klawiszy dla nowego bindu (np. 'ctrl+alt+t'): ")
-        if key_combination in current_binds and current_binds[key_combination] == '':
-            function_name = input("Podaj nazwę funkcji do zbindowania (np. 'toggle_mute'): ")
-            # Sprawdź, czy funkcja istnieje
-            if hasattr(bind, function_name):
-                hook = keyboard.add_hotkey(key_combination, lambda: getattr(bind, function_name)())
-                current_binds[key_combination] = hook
-                print(f"Bind '{function_name}' dodany do '{key_combination}'")
-            else:
-                print("Funkcja nie istnieje.")
+    @staticmethod
+    def list_available_binds():
+        print("Available binds:")
+        for function_name in available_binds:
+            print(function_name)
+
+    #ADD BIND
+    @staticmethod
+    def add_bind(key_combination, function_name):
+        global current_binds, available_binds
+        if function_name in available_binds:
+            function_to_bind = available_binds[function_name]
+            current_binds[key_combination] = function_to_bind
+            del available_binds[function_name]
+            keyboard.add_hotkey(key_combination, function_to_bind)
+            print(f"Bind '{key_combination}' added for '{function_name}'.")
         else:
-            print("Niepoprawna kombinacja klawiszy lub już jest używana.")
+            print(f"Function '{function_name}' not available.")
 
     #REMOVE BIND
-    def remove_bind():
-        key_combination = input("Podaj kombinację klawiszy bindu do usunięcia: ")
-        if key_combination in current_binds and current_binds[key_combination] != '':
-            keyboard.unhook(current_binds[key_combination])
-            current_binds[key_combination] = ''
-            print(f"Bind '{key_combination}' usunięty.")
-        else:
-            print("Bind nie istnieje lub jest już nieaktywny.")
- 
+    @staticmethod
+    def remove_bind(key_combination):
+        global current_binds, available_binds
+        # Check if the bind exists in current_binds
+        if key_combination in current_binds:
+            # Check if the bind was actually added as a hotkey
+            if key_combination in keyboard._hotkeys:
+                keyboard.remove_hotkey(key_combination)
 
+            function_name = current_binds[key_combination].__name__
+            available_binds[function_name] = current_binds[key_combination]
+            del current_binds[key_combination]
+            print(f"Bind '{key_combination}' removed.")
+        else:
+            print(f"No bind found for '{key_combination}'.")
+ 
 class CutOff:
     def __init__(self, audio_controller, normal_level, detected_level):
         self.audio_controller = audio_controller
@@ -251,34 +272,9 @@ current_binds = {'f1': bind.toggle_mute,
                  '9': bind.set_mute_hard_mode 
                  }
 
+available_binds = {}
+
 bind = Bind(audio_controller)
-
-
-
-while True:
-    choice = input("Wybierz opcję: [1] Dodaj bind, [2] Usuń bind, [3] Wyjście: ")
-    if choice == '1':
-        bind.add_bind()
-    elif choice == '2':
-        bind.remove_bind()
-    elif choice == '3':
-        break
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # keyboard.add_hotkey('f1', bind.toggle_mute)
@@ -386,7 +382,32 @@ def timeout_handler(threshold_not_reached, audio_controller):
 if __name__ == "__main__":
     try:
         while True:
-            time.sleep(0.1)
+            print("\nMenu:")
+            print("1. Add a bind")
+            print("2. Remove a bind")
+            print("3. Exit")
+            print("List acvite binds")
+            Bind.list_active_binds()
+            print("List available binds")
+            Bind.list_available_binds()
+            choice = input("Enter your choice: ")
+
+            if choice == '1':
+                key_combination = input("Enter key combination for the bind: ")
+                function_name = input("Enter function name for the bind: ")
+                Bind.add_bind(key_combination, function_name)
+
+            elif choice == '2':
+                key_combination = input("Enter key combination of the bind to remove: ")
+                Bind.remove_bind(key_combination)
+
+            elif choice == '3':
+                print("Exiting program.")
+                break
+
+            else:
+                print("Invalid choice. Please try again.")
+
     except KeyboardInterrupt:
         pass
     finally:
