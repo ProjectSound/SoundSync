@@ -1,4 +1,3 @@
-
 import sounddevice as sd
 import time
 import sys
@@ -10,6 +9,89 @@ from time import sleep
 from threading import Lock
 from pycaw.pycaw import AudioUtilities
 from datetime import datetime, timedelta
+from PyQt6.QtWidgets import QApplication, QMainWindow, QLineEdit, QVBoxLayout, QWidget, QPushButton, QKeySequenceEdit
+
+#KOD TYMCZASOWY
+class BindWindow(QMainWindow):
+    def __init__(self, bind):
+        super().__init__()
+        self.bind = bind
+        self.initUI()
+
+    def handle_key_sequence(self):
+        if self.event_source_key_press and self.key_sequence_edit.isEnabled() and self.key_sequence_edit.hasFocus():
+            key_sequence = self.key_sequence_edit.keySequence().toString()
+            self.key_sequence_edit.setDisabled(True)
+
+            print(f"Key sequence: {key_sequence}")
+
+            if key_sequence in registered_hotkeys:
+                print(f"The key combination {key_sequence} exists.")
+            else:
+                method = Bind(audio_controller).toggle_mute
+                keyboard.add_hotkey(key_sequence, lambda method=method: self.handle_hotkey(method))
+                registered_hotkeys[key_sequence] = "Pressed!"
+
+            self.event_source_key_press = False
+
+    def initUI(self):
+        self.layout = QVBoxLayout()
+
+        self.key_sequence_edit = QKeySequenceEdit(self)
+        self.key_sequence_edit.setMaximumSequenceLength(1)
+        self.key_sequence_edit.setClearButtonEnabled(True)
+
+        self.add_hotkey_button = QPushButton('Add Hotkey', self)
+        self.add_hotkey_button.clicked.connect(self.add_hotkey)
+
+        self.remove_hotkey_button = QPushButton("Remove Hotkey", self)
+        self.remove_hotkey_button.clicked.connect(self.remove_hotkey)
+
+        self.show_binds = QPushButton("Pokaż kombinacje")
+        self.show_binds.clicked.connect(self.showBinds)
+
+        self.key_sequence_edit.editingFinished.connect(self.handle_key_sequence)
+
+        central_widget = QWidget(self)
+        self.setCentralWidget(central_widget)
+
+        layout = QVBoxLayout(central_widget)
+        layout.addWidget(self.key_sequence_edit)
+        layout.addWidget(self.add_hotkey_button)
+        layout.addWidget(self.remove_hotkey_button)
+        layout.addWidget(self.show_binds)
+        layout.addSpacing(20)
+
+        self.event_source_key_press = True
+
+        self.bind.loadBinds
+        
+    def handle_hotkey(self, bind):
+        Bind()
+
+    def showBinds(self):
+        print(registered_hotkeys)
+
+    def add_hotkey(self):
+        self.key_sequence_edit.setDisabled(False)
+        self.key_sequence_edit.clear()
+        self.key_sequence_edit.setFocus()
+        self.event_source_key_press = True
+
+    def remove_hotkey(self):
+        key_sequence = self.key_sequence_edit.keySequence().toString()
+        if key_sequence in registered_hotkeys:
+            keyboard.remove_hotkey(key_sequence)
+            del registered_hotkeys[key_sequence]
+            print(f"Hotkey {key_sequence} removed.")
+        else:
+            print(f"No hotkey {key_sequence} found to remove.")
+
+        self.key_sequence_edit.setDisabled(True)
+        self.key_sequence_edit.clear()
+        self.key_sequence_edit.setFocus()
+        self.event_source_key_press = False
+#KOD TYMCZASOWY
 
 class AudioController:
     def __init__(self, process_name: str):
@@ -66,7 +148,23 @@ class Bind:
         self.is_app_running = True
         self.is_input1_disabled = False
         self.is_input2_disabled = False
+        self.event_source_key_press = False         
 
+        self.actions = {
+            0: {"MUTE CONTROLLED APP": self.toggle_app_running},
+            1: {"START / STOP APP": self.toggle_app_running},
+            2: {"DISABLE INPUT 1": self.disable_input1},
+            3: {"DISABLE INPUT 2": self.disable_input2},
+            4: {"CUTOFF MODE HARD": self.set_hard_mode},
+            5: {"CUTOFF MODE FADE": self.set_fade_mode},
+            6: {"MUTE / UNMUTE": self.toggle_mute},
+            7: {"HARD CUT + FADE UP": self.set_hard_fade_mode},
+            8: {"FADE DOWN + HARD UP": self.set_fade_hard_mode},
+            9: {"MUTE + FADE UP": self.set_mute_fade_mode},
+            10: {"MUTE + HARD UP": self.set_mute_hard_mode}
+        }
+
+        self.loadBinds()
     # MUTE CONTROLLED APP (TOGGLE)
     def toggle_mute(self):
         if self.is_manually_muted:
@@ -119,7 +217,7 @@ class Bind:
     @staticmethod
     def set_fade_hard_mode():
         cut_off.set_mode("Fade down + hard up")
-    #Mute FADE
+    #MUTE FADE
     @staticmethod
     def set_mute_hard_mode():
         cut_off.set_mode("Mute + fade up")
@@ -128,49 +226,39 @@ class Bind:
     def set_mute_fade_mode():
         cut_off.set_mode("Mute + hard up")
 
-    #LIST BINDS
-    @staticmethod
-    def list_active_binds():
-        print("Active binds:")
-        for key, function in current_binds.items():
-            print(f"{key}: {function.__name__}")
-
-    @staticmethod
-    def list_available_binds():
-        print("Available binds:")
-        for function_name in available_binds:
-            print(function_name)
 
     #ADD BIND
-    @staticmethod
-    def add_bind(key_combination, function_name):
-        global current_binds, available_binds
-        if function_name in available_binds:
-            function_to_bind = available_binds[function_name]
-            current_binds[key_combination] = function_to_bind
-            del available_binds[function_name]
-            keyboard.add_hotkey(key_combination, function_to_bind)
-            print(f"Bind '{key_combination}' added for '{function_name}'.")
-        else:
-            print(f"Function '{function_name}' not available.")
+    # def add_hotkey(self):
+    #     self.key_sequence_edit.setDisabled(False)
+    #     self.key_sequence_edit.clear()
+    #     self.key_sequence_edit.setFocus()
+    #     self.event_source_key_press = True
+
+    def add_hotkey(self,hotkey):
+        print(f"Adding hotkey: {hotkey}")
+
+    #SHOW BIND
+    def showBinds(self):
+        print(registered_hotkeys)
 
     #REMOVE BIND
-    @staticmethod
-    def remove_bind(key_combination):
-        global current_binds, available_binds
-        # Check if the bind exists in current_binds
-        if key_combination in current_binds:
-            # Check if the bind was actually added as a hotkey
-            if key_combination in keyboard._hotkeys:
-                keyboard.remove_hotkey(key_combination)
+    # def remove_hotkey(self):
+    #     self.key_sequence_edit.setDisabled(True)
+    #     self.key_sequence_edit.clear()
+    #     self.event_source_key_press = False
 
-            function_name = current_binds[key_combination].__name__
-            available_binds[function_name] = current_binds[key_combination]
-            del current_binds[key_combination]
-            print(f"Bind '{key_combination}' removed.")
-        else:
-            print(f"No bind found for '{key_combination}'.")
- 
+    def remove_hotkey(self,hotkey):
+        print(f"Remove hotkey: {hotkey}")
+        
+    def loadBinds(self):
+        for combination, hotkeyAction in hotkeys_to_load.items():
+            for action in self.actions.values():
+                for name, method in action.items():
+                    if name == hotkeyAction:
+                        keyboard.add_hotkey(combination, lambda method=method: self.add_hotkey(method))
+                        registered_hotkeys[combination] = method
+                        print(f"{combination}: {method}")
+
 class CutOff:
     def __init__(self, audio_controller, normal_level, detected_level):
         self.audio_controller = audio_controller
@@ -229,15 +317,24 @@ class CutOff:
                     audio_controller.set_volume(new_level)
                     time.sleep(0.01)
                 audio_controller.set_volume(target_level)
-  
-# cutoffModes = [
-#     "Hard",
-#     "Fade",
-#     "Hard cut + fade up",
-#     "Fade down + hard up",
-#     "Mute + fade up",
-#     "Mute + hard up"
-# ]
+
+hotkeys_to_load = {
+    "1": "MUTE CONTROLLED APP",
+    "2": "START / STOP APP",
+    "3": "DISABLE INPUT 1",
+    "4": "DISABLE INPUT 2",
+    "5": "CUTOFF MODE HARD",
+    "6": "CUTOFF MODE FADE",
+    "7": "MUTE / UNMUTE",
+    "8": "HARD CUT + FADE UP",
+    "9": "FADE DOWN + HARD UP",
+    "0": "MUTE + FADE UP",
+    "F1": "MUTE + HARD UP"
+}
+
+
+registered_hotkeys = {}
+
 
 device_indices = []
 for i in range(2):
@@ -254,40 +351,12 @@ threshold_not_reached2 = 2
 normal_sound_level = 1
 detected_sound_level = 0.3
 
-
 apps = AudioController.list_applications()
-app_index = 0
+app_index = 3
+print(apps)
 audio_controller = AudioController(apps[app_index])
 bind = Bind(audio_controller)
 cut_off = CutOff(audio_controller, normal_sound_level, detected_sound_level)
-
-current_binds = {'f1': bind.toggle_mute, 
-                 'f2': bind.toggle_app_running, 
-                 'f3': bind.disable_input1, 
-                 'f4': bind.disable_input2, 
-                 '5': bind.set_hard_mode, 
-                 '6': bind.set_fade_mode, 
-                 '7': bind.set_fade_hard_mode, 
-                 '8': bind.set_mute_fade_mode,
-                 '9': bind.set_mute_hard_mode 
-                 }
-
-available_binds = {}
-
-bind = Bind(audio_controller)
-
-
-# keyboard.add_hotkey('f1', bind.toggle_mute)
-# keyboard.add_hotkey('f2', bind.toggle_app_running)
-# keyboard.add_hotkey('f3', bind.disable_input1)
-# keyboard.add_hotkey('f4', bind.disable_input2)
-
-# keyboard.add_hotkey('1', Bind.set_hard_mode)
-# keyboard.add_hotkey('2', Bind.set_fade_mode)
-# keyboard.add_hotkey('3', Bind.set_hard_fade_mode)
-# keyboard.add_hotkey('4', Bind.set_fade_hard_mode)
-# keyboard.add_hotkey('5', Bind.set_mute_fade_mode)
-# keyboard.add_hotkey('6', Bind.set_mute_hard_mode)
 
 use_input2 = len(device_indices) > 1 #Optional input
 
@@ -296,6 +365,7 @@ max_rms_values = collections.deque(maxlen=1000)
 
 state_lock = Lock()
 shared_state = SharedState()
+
 def audio_callback(indata, frames, time_info, status, input_state, other_state, audio_controller):
     # MUTE CONTROLLED APP (TOGGLE)
     if bind.is_muted(): #or not bind.is_app_running: 
@@ -380,38 +450,18 @@ def timeout_handler(threshold_not_reached, audio_controller):
     time.sleep(threshold_not_reached)
 
 if __name__ == "__main__":
-    try:
-        while True:
-            print("\nMenu:")
-            print("1. Add a bind")
-            print("2. Remove a bind")
-            print("3. Exit")
-            print("List acvite binds")
-            Bind.list_active_binds()
-            print("List available binds")
-            Bind.list_available_binds()
-            choice = input("Enter your choice: ")
-
-            if choice == '1':
-                key_combination = input("Enter key combination for the bind: ")
-                function_name = input("Enter function name for the bind: ")
-                Bind.add_bind(key_combination, function_name)
-
-            elif choice == '2':
-                key_combination = input("Enter key combination of the bind to remove: ")
-                Bind.remove_bind(key_combination)
-
-            elif choice == '3':
-                print("Exiting program.")
-                break
-
-            else:
-                print("Invalid choice. Please try again.")
-
-    except KeyboardInterrupt:
-        pass
-    finally:
-        keyboard.unhook_all()
-        for stream in streams:
-            stream.stop()
-
+    app = QApplication([])
+    audio_controller = AudioController("firefox.exe")
+    bind = Bind(audio_controller)
+    main_window = BindWindow(bind)
+    main_window.show()
+    sys.exit(app.exec())
+    # try:
+    #     while True:
+    #         time.sleep(0.1)
+    # except KeyboardInterrupt:
+    #     pass
+    # finally:
+    #     keyboard.unhook_all()
+    #     for stream in streams:
+    #         stream.stop()
