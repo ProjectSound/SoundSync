@@ -5,19 +5,90 @@ import numpy as np
 import threading
 import collections
 import keyboard
+import json
+import os
+import getpass
+import subprocess
 from time import sleep
 from threading import Lock
 from pycaw.pycaw import AudioUtilities
 from datetime import datetime, timedelta
+from pycaw.pycaw import AudioUtilities
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLineEdit, QVBoxLayout, QWidget, QPushButton, QKeySequenceEdit
+from pathlib import Path
 
-#KOD TYMCZASOWY
+# Funkcje do zarządzania ustawieniami
+def save_settings(settings):
+    with open("settings.json", "w") as file:
+        json.dump(settings, file)
+
+def load_settings():
+    try:
+        with open("settings.json", "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
+
+def add_to_startup(file_path, icon_path=None, enable=True):
+    startup_folder = Path(
+        f"C:\\Users\\{getpass.getuser()}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+    )
+    shortcut_name = "SoundSync" 
+    shortcut_path = startup_folder / f"{shortcut_name}.lnk"
+
+    if enable:
+        # Tworzenie skrótu do dodania do autostartu
+        command = (f'powershell "$s=(New-Object -COM WScript.Shell).CreateShortcut(\'{shortcut_path}\');'
+                   f'$s.TargetPath=\'{sys.executable}\';'
+                   f'$s.Arguments=\'{file_path}\';')
+        if icon_path:
+            command += f'$s.IconLocation=\'{icon_path}\';'
+        command += '$s.Save()"'
+        os.system(command)
+        print("Aplikacja została dodana do autostartu.")
+    else:
+        # Usuwanie skrótu, jeśli istnieje
+        if shortcut_path.exists():
+            shortcut_path.unlink()
+        print("Aplikacja została wyłączona z autostartu.")
+
+# Klasa głównego okna
 class BindWindow(QMainWindow):
     def __init__(self, bind):
         super().__init__()
         self.bind = bind
         self.initUI()
 
+    def initUI(self):
+        # Definicje elementów UI
+        self.layout = QVBoxLayout()
+        self.key_sequence_edit = QKeySequenceEdit(self)
+        self.add_hotkey_button = QPushButton('Add Hotkey', self)
+        self.remove_hotkey_button = QPushButton("Remove Hotkey", self)
+        self.show_binds = QPushButton("Pokaż kombinacje")
+
+        # Ustawienie widgetów
+        self.key_sequence_edit.setMaximumSequenceLength(1)
+        self.key_sequence_edit.setClearButtonEnabled(True)
+        self.add_hotkey_button.clicked.connect(self.add_hotkey)
+        self.remove_hotkey_button.clicked.connect(self.remove_hotkey)
+        self.show_binds.clicked.connect(self.showBinds)
+        self.key_sequence_edit.editingFinished.connect(self.handle_key_sequence)
+
+        # Układanie elementów
+        central_widget = QWidget(self)
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout(central_widget)
+        layout.addWidget(self.key_sequence_edit)
+        layout.addWidget(self.add_hotkey_button)
+        layout.addWidget(self.remove_hotkey_button)
+        layout.addWidget(self.show_binds)
+        layout.addSpacing(20)
+
+        self.event_source_key_press = True
+        self.bind.loadBinds()
+
+    # Obsługa zdarzeń
     def handle_key_sequence(self):
         if self.event_source_key_press and self.key_sequence_edit.isEnabled() and self.key_sequence_edit.hasFocus():
             key_sequence = self.key_sequence_edit.keySequence().toString()
@@ -33,39 +104,8 @@ class BindWindow(QMainWindow):
                 registered_hotkeys[key_sequence] = "Pressed!"
 
             self.event_source_key_press = False
+        pass
 
-    def initUI(self):
-        self.layout = QVBoxLayout()
-
-        self.key_sequence_edit = QKeySequenceEdit(self)
-        self.key_sequence_edit.setMaximumSequenceLength(1)
-        self.key_sequence_edit.setClearButtonEnabled(True)
-
-        self.add_hotkey_button = QPushButton('Add Hotkey', self)
-        self.add_hotkey_button.clicked.connect(self.add_hotkey)
-
-        self.remove_hotkey_button = QPushButton("Remove Hotkey", self)
-        self.remove_hotkey_button.clicked.connect(self.remove_hotkey)
-
-        self.show_binds = QPushButton("Pokaż kombinacje")
-        self.show_binds.clicked.connect(self.showBinds)
-
-        self.key_sequence_edit.editingFinished.connect(self.handle_key_sequence)
-
-        central_widget = QWidget(self)
-        self.setCentralWidget(central_widget)
-
-        layout = QVBoxLayout(central_widget)
-        layout.addWidget(self.key_sequence_edit)
-        layout.addWidget(self.add_hotkey_button)
-        layout.addWidget(self.remove_hotkey_button)
-        layout.addWidget(self.show_binds)
-        layout.addSpacing(20)
-
-        self.event_source_key_press = True
-
-        self.bind.loadBinds
-        
     def handle_hotkey(self, bind):
         Bind()
 
@@ -91,8 +131,8 @@ class BindWindow(QMainWindow):
         self.key_sequence_edit.clear()
         self.key_sequence_edit.setFocus()
         self.event_source_key_press = False
-#KOD TYMCZASOWY
 
+# Klasa kontrolera audio
 class AudioController:
     def __init__(self, process_name: str):
         self.process_name = process_name
@@ -105,6 +145,7 @@ class AudioController:
             if session.Process and session.Process.name() == self.process_name:
                 print("Volume:", interface.GetMasterVolume())  # debug
                 return interface.GetMasterVolume()
+        pass
 
     def set_volume(self, decibels: float) -> None:
         sessions = AudioUtilities.GetAllSessions()
@@ -115,6 +156,7 @@ class AudioController:
                 self.volume = min(1.0, max(0.0, decibels))
                 interface.SetMasterVolume(self.volume, None)
                 print("Volume set to", self.volume)  # debug
+        pass
 
     @staticmethod
     def list_applications() -> list:
@@ -125,7 +167,9 @@ class AudioController:
                 print(f"Index {index}: {session.Process.name()}")
                 apps.append(session.Process.name())
         return apps
-    
+        pass
+
+# Klasa stanu wejścia
 class InputState:
     def __init__(self, threshold, threshold_not_reached, normal_level, detected_level):
         self.threshold = threshold
@@ -136,11 +180,13 @@ class InputState:
         self.timeout_timestamp = None
         self.max_rms = 0.1 
 
+# Klasa współdzielonego stanu
 class SharedState:
     def __init__(self):
         self.active_input = None
         self.lock = Lock()
 
+# Klasa przypisania
 class Bind:
     def __init__(self, audio_controller):
         self.audio_controller = audio_controller
@@ -148,24 +194,10 @@ class Bind:
         self.is_app_running = True
         self.is_input1_disabled = False
         self.is_input2_disabled = False
-        self.event_source_key_press = False         
+        self.event_source_key_press = False   
+        pass
 
-        self.actions = {
-            0: {"MUTE CONTROLLED APP": self.toggle_app_running},
-            1: {"START / STOP APP": self.toggle_app_running},
-            2: {"DISABLE INPUT 1": self.disable_input1},
-            3: {"DISABLE INPUT 2": self.disable_input2},
-            4: {"CUTOFF MODE HARD": self.set_hard_mode},
-            5: {"CUTOFF MODE FADE": self.set_fade_mode},
-            6: {"MUTE / UNMUTE": self.toggle_mute},
-            7: {"HARD CUT + FADE UP": self.set_hard_fade_mode},
-            8: {"FADE DOWN + HARD UP": self.set_fade_hard_mode},
-            9: {"MUTE + FADE UP": self.set_mute_fade_mode},
-            10: {"MUTE + HARD UP": self.set_mute_hard_mode}
-        }
-
-        self.loadBinds()
-    # MUTE CONTROLLED APP (TOGGLE)
+    # Definicje różnych metod dla przypisania
     def toggle_mute(self):
         if self.is_manually_muted:
             self.audio_controller.set_volume(self.audio_controller.previous_volume)
@@ -175,11 +207,11 @@ class Bind:
             self.audio_controller.set_volume(0)
             self.is_manually_muted = True
         print(f"{self.audio_controller.process_name} mute toggled.")
+        pass
 
     def is_muted(self):
         return self.is_manually_muted
-    
-    # START / STOP APP
+
     def toggle_app_running(self):
         global streams
         if self.is_app_running:
@@ -192,64 +224,39 @@ class Bind:
                 stream.start()
             self.is_app_running = True
 
-    # DISABLE INPUT 1
-    @staticmethod
     def disable_input1(self):
         self.is_input1_disabled = not self.is_input1_disabled
-    # DISABLE INPUT 2
-    @staticmethod
+
     def disable_input2(self):
         self.is_input2_disabled = not self.is_input2_disabled
 
-    #HARD
-    @staticmethod
-    def set_hard_mode():
+    def set_hard_mode(self):
         cut_off.set_mode("Hard")
-    #FADE
-    @staticmethod
-    def set_fade_mode():
+
+    def set_fade_mode(self):
         cut_off.set_mode("Fade")
-    #HARD FADE
-    @staticmethod
-    def set_hard_fade_mode():
+
+    def set_hard_fade_mode(self):
         cut_off.set_mode("Hard cut + fade up")
-    #FADE HARD
-    @staticmethod
-    def set_fade_hard_mode():
+
+    def set_fade_hard_mode(self):
         cut_off.set_mode("Fade down + hard up")
-    #MUTE FADE
-    @staticmethod
-    def set_mute_hard_mode():
+
+    def set_mute_hard_mode(self):
         cut_off.set_mode("Mute + fade up")
-    #MUTE HARD
-    @staticmethod
-    def set_mute_fade_mode():
+
+    def set_mute_fade_mode(self):
         cut_off.set_mode("Mute + hard up")
-
-
-    #ADD BIND
-    # def add_hotkey(self):
-    #     self.key_sequence_edit.setDisabled(False)
-    #     self.key_sequence_edit.clear()
-    #     self.key_sequence_edit.setFocus()
-    #     self.event_source_key_press = True
 
     def add_hotkey(self,hotkey):
         print(f"Adding hotkey: {hotkey}")
 
-    #SHOW BIND
     def showBinds(self):
         print(registered_hotkeys)
 
-    #REMOVE BIND
-    # def remove_hotkey(self):
-    #     self.key_sequence_edit.setDisabled(True)
-    #     self.key_sequence_edit.clear()
-    #     self.event_source_key_press = False
-
     def remove_hotkey(self,hotkey):
         print(f"Remove hotkey: {hotkey}")
-        
+
     def loadBinds(self):
         for combination, hotkeyAction in hotkeys_to_load.items():
             for action in self.actions.values():
@@ -259,6 +266,7 @@ class Bind:
                         registered_hotkeys[combination] = method
                         print(f"{combination}: {method}")
 
+# Klasa CutOff
 class CutOff:
     def __init__(self, audio_controller, normal_level, detected_level):
         self.audio_controller = audio_controller
@@ -318,6 +326,7 @@ class CutOff:
                     time.sleep(0.01)
                 audio_controller.set_volume(target_level)
 
+# Definicje zmiennych globalnych
 hotkeys_to_load = {
     "1": "MUTE CONTROLLED APP",
     "2": "START / STOP APP",
@@ -332,42 +341,36 @@ hotkeys_to_load = {
     "F1": "MUTE + HARD UP"
 }
 
-
 registered_hotkeys = {}
-
-
-device_indices = []
-for i in range(2):
-    device_index = int(input(f"Enter the index of input device {i+1}: "))
-    device_indices.append(device_index)
-
-# device_index = int(input(f"Enter the index of input device: "))
-# device_indices.append(device_index)
-
+device_indices = [0, 1] # Przykładowe indeksy urządzeń
 threshold1 = 30
 threshold_not_reached1 = 5
 threshold2 = 30
 threshold_not_reached2 = 2
 normal_sound_level = 1
 detected_sound_level = 0.3
-
 apps = AudioController.list_applications()
-app_index = 3
-print(apps)
+app_index = 1
 audio_controller = AudioController(apps[app_index])
 bind = Bind(audio_controller)
 cut_off = CutOff(audio_controller, normal_sound_level, detected_sound_level)
-
-use_input2 = len(device_indices) > 1 #Optional input
-
+use_input2 = len(device_indices) > 1
 rms_values = collections.deque(maxlen=10)
 max_rms_values = collections.deque(maxlen=1000)
-
 state_lock = Lock()
 shared_state = SharedState()
 
+# Inicjalizacja ustawień
+settings = {
+    "input_device_index": device_indices,
+    "monitored_app": "firefox.exe",
+    "autostart_enabled": True
+}
+save_settings(settings)
+
+# Callbacki audio
 def audio_callback(indata, frames, time_info, status, input_state, other_state, audio_controller):
-    # MUTE CONTROLLED APP (TOGGLE)
+     # MUTE CONTROLLED APP (TOGGLE)
     if bind.is_muted(): #or not bind.is_app_running: 
         return
     # DISABLE INPUT 1/2
@@ -385,13 +388,9 @@ def audio_callback(indata, frames, time_info, status, input_state, other_state, 
     with shared_state.lock:
         input_state.max_rms = max(input_state.max_rms, rms)
         mapped_value = (rms - min_rms) / (input_state.max_rms - min_rms) * 100.0 if (input_state.max_rms - min_rms) > 0 else 0
-        #print(f"Input RMS: {rms}, Mapped Value: {mapped_value}, Threshold: {input_state.threshold}")  # Dodane logowanie
 
         if mapped_value >= input_state.threshold:
             if not input_state.is_faded:
-                # print(f"Fading audio down for input state with threshold {input_state.threshold}")  # Dodane logowanie
-                # fade_audio(audio_controller, input_state.detected_level, duration=1)
-                # HARD
                 cut_off.apply_volume(input_state)
                 input_state.is_faded = True
             input_state.timeout_timestamp = datetime.now()
@@ -401,67 +400,45 @@ def audio_callback(indata, frames, time_info, status, input_state, other_state, 
                 if datetime.now() - input_state.timeout_timestamp >= timedelta(seconds=input_state.threshold_not_reached):
                     if other_state.is_faded:
                         if datetime.now() - other_state.timeout_timestamp >= timedelta(seconds=other_state.threshold_not_reached):
-                            # print(f"Fading audio up for input state with threshold {input_state.threshold}")  # Dodane logowanie
-                            # fade_audio(audio_controller, input_state.normal_level, duration=1)
                             cut_off.apply_volume(input_state)
                             input_state.is_faded = False
                             other_state.is_faded = False
                             shared_state.active_input = None
                     else:
-                        # print(f"Fading audio up for input state with threshold {input_state.threshold}")  # Dodane logowanie
-                        # fade_audio(audio_controller, input_state.normal_level, duration=1)
                         cut_off.apply_volume(input_state)
                         input_state.is_faded = False
                         shared_state.active_input = None
 
-    sd.sleep(1)
-
 state_input1 = InputState(threshold1, threshold_not_reached1, normal_sound_level, detected_sound_level)
 state_input2 = InputState(threshold2, threshold_not_reached2, normal_sound_level, detected_sound_level)
-
-# Przypisanie funkcji callback do każdego inputu
 callback_function1 = lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, state_input1, state_input2, audio_controller)
 callback_function2 = lambda indata, frames, time_info, status: audio_callback(indata, frames, time_info, status, state_input2, state_input1, audio_controller)
 
+# Inicjalizacja urządzeń i strumieni
 devices = sd.query_devices()
 input_devices = [device for device in devices if device['max_input_channels'] > 0 and not device['name'].startswith('Loopback')]
-device_names = set()
-
-#devices = sd.query_devices() ???
-for i, device in enumerate(devices):
-    if device['hostapi'] == 0 and device['max_input_channels'] > 0:
-        print(f"Device {i}: {device['name']}")
-
-# Create input streams for the chosen devices
 streams = []
 threads = []
-
 for i in range(2 if use_input2 else 1):
     device_name = input_devices[device_indices[i]]['name']
     callback_function = callback_function1 if i == 0 else (callback_function2 if use_input2 else None)
-    stream = sd.InputStream(device=device_name, channels=2, callback=callback_function)
+    stream = sd.InputStream(device=device_indices[i], channels=2, callback=callback_function)
     streams.append(stream)
     thread = threading.Thread(target=stream.start)
     threads.append(thread)
     thread.start()
 
 
-def timeout_handler(threshold_not_reached, audio_controller):
-    time.sleep(threshold_not_reached)
-
 if __name__ == "__main__":
+    loaded_settings = load_settings()
+    choice = input("Czy chcesz dodać tę aplikację do autostartu? (tak/nie): ").strip().lower()
+    if choice == 'tak':
+        add_to_startup(__file__)
+    elif choice == 'nie':
+        add_to_startup(__file__, enable=False)
+    else:
+        print("Niepoprawna odpowiedź.")
     app = QApplication([])
-    audio_controller = AudioController("firefox.exe")
-    bind = Bind(audio_controller)
-    main_window = BindWindow(bind)
-    main_window.show()
+    #main_window = BindWindow(bind)
+    #main_window.show()
     sys.exit(app.exec())
-    # try:
-    #     while True:
-    #         time.sleep(0.1)
-    # except KeyboardInterrupt:
-    #     pass
-    # finally:
-    #     keyboard.unhook_all()
-    #     for stream in streams:
-    #         stream.stop()
