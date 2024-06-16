@@ -1,0 +1,15 @@
+cffi==1.16.0
+comtypes==1.4.2
+keyboard==0.13.5
+numpy==1.26.4
+psutil==5.9.8
+pycaw==20240210
+pycparser==2.22
+PyQt6==6.7.0
+PyQt6-Qt6==6.7.0
+PyQt6-sip==13.6.0
+PySide6==6.7.1
+PySide6_Addons==6.7.1
+PySide6_Essentials==6.7.1
+shiboken6==6.7.1
+sounddevice==0.4.7

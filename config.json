@@ -1,0 +1,20 @@
+{
+    "key_actions": {},
+    "selectedScale": 0,
+    "selectedTheme": 0,
+    "auto_launch": false,
+    "minimize_to_tray": true,
+    "scaleTitlebar": true,
+    "scaleMessageBox": true,
+    "selectedInput1": 1,
+    "selectedInput2": null,
+    "selectedCutoff": 1,
+    "threshold1": 10,
+    "threshold_not_reached1": 2,
+    "threshold2": 10,
+    "threshold_not_reached2": 2,
+    "selectedApp": null,
+    "normal_sound_level": 100,
+    "reduced_sound_level": 50,
+    "fade_duration": 1.0
+}

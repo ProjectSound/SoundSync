@@ -1,0 +1,38 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="app_icon.ico">icons/app_icon.ico</file>
+        <file alias="start.svg">icons/start.svg</file>
+        <file alias="minimalize.svg">icons/minimalize.svg</file>
+        <file alias="minimalize_light.svg">icons/minimalize_light.svg</file>
+        <file alias="close.svg">icons/close.svg</file>
+        <file alias="close_light.svg">icons/close_light.svg</file>
+        <file alias="stop.svg">icons/stop.svg</file>
+        <file alias="input.svg">icons/input.svg</file>
+        <file alias="app.svg">icons/app.svg</file>
+        <file alias="cutoff.svg">icons/cutoff.svg</file>
+        <file alias="binds.svg">icons/binds.svg</file>
+        <file alias="settings.svg">icons/settings.svg</file>
+        <file alias="threshold.svg">icons/threshold.svg</file>
+        <file alias="stopwatch.svg">icons/stopwatch.svg</file>
+        <file alias="low_volume.svg">icons/low_volume.svg</file>
+        <file alias="arrow_down.svg">icons/arrow_down.svg</file>
+        <file alias="arrow_down_dark.svg">icons/arrow_down_dark.svg</file>
+        <file alias="info.svg">icons/info.svg</file>
+        <file alias="swap.svg">icons/swap.svg</file>
+        <file alias="right-arrow.svg">icons/right-arrow.svg</file>
+        <file alias="left.svg">icons/left.svg</file>
+        <file alias="right.svg">icons/right.svg</file>
+        <file alias="mouse-double-click-left.svg">icons/mouse-double-click-left.svg</file>
+        <file alias="mouse-double-click-right.svg">icons/mouse-double-click-right.svg</file>
+        <!-- Add a file element for each font file -->
+        <file alias="Poppins-Bold.ttf">fonts/Poppins/Poppins-Bold.ttf</file>
+        <file alias="Poppins-ExtraBold.ttf">fonts/Poppins/Poppins-ExtraBold.ttf</file>
+        <file alias="Poppins-Medium.ttf">fonts/Poppins/Poppins-Medium.ttf</file>
+        <file alias="Poppins-Regular.ttf">fonts/Poppins/Poppins-Regular.ttf</file>
+        <file alias="Poppins-SemiBold.ttf">fonts/Poppins/Poppins-SemiBold.ttf</file>
+        <!-- Message Box -->
+        <file alias="error.svg">icons/error.svg</file>
+        <file alias="warning.svg">icons/warning.svg</file>
+        <file alias="info_box.svg">icons/info_box.svg</file>
+    </qresource>
+</RCC>
